@@ -23,7 +23,7 @@ sudo chkconfig docker on
 echo "Install Jenkins"
 curl --silent --location http://pkg.jenkins-ci.org/redhat/jenkins.repo | sudo tee /etc/yum.repos.d/jenkins.repo
 sudo rpm --import https://pkg.jenkins.io/redhat/jenkins.io.key
-sudo yum install jenkins --nogpgcheck
+sudo yum install -y jenkins --nogpgcheck
 
 
 sudo usermod -a -G docker jenkins
