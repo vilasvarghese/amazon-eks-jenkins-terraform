@@ -34,69 +34,33 @@ sudo systemctl start jenkins
 sudo systemctl enable jenkins
 
 echo "Install Kubernetes Master"
-#!/bin/bash
-
-# Update hosts file
-echo "[TASK 1] Update /etc/hosts file"
-cat >>/etc/hosts<<EOF
-192.168.253.130 kmaster kmaster
-192.168.253.131 kworker1 kworker1
-192.168.253.132 kworker2 kworker2
-EOF
-
-# Disable SELinux
-echo "[TASK 4] Disable SELinux"
-setenforce 0
-sed -i --follow-symlinks 's/^SELINUX=enforcing/SELINUX=disabled/' /etc/sysconfig/selinux
-
-# Stop and disable firewalld
-echo "[TASK 5] Stop and Disable firewalld"
-systemctl disable firewalld >/dev/null 2>&1
-systemctl stop firewalld
-
-# Add sysctl settings
-echo "[TASK 6] Add sysctl settings"
-cat >>/etc/sysctl.d/kubernetes.conf<<EOF
-net.bridge.bridge-nf-call-ip6tables = 1
-net.bridge.bridge-nf-call-iptables = 1
-EOF
-sysctl --system >/dev/null 2>&1
-
-# Disable swap
-echo "[TASK 7] Disable and turn off SWAP"
-sed -i '/swap/d' /etc/fstab
-swapoff -a
-
-# Add yum repo file for Kubernetes
-echo "[TASK 8] Add yum repo file for kubernetes"
-cat >>/etc/yum.repos.d/kubernetes.repo<<EOF
+cat <<EOF > /etc/yum.repos.d/kubernetes.repo
 [kubernetes]
 name=Kubernetes
 baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
 enabled=1
 gpgcheck=1
-repo_gpgcheck=1
-gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg
-        https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+repo_gpgcheck=0
+gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+exclude=kube*
 EOF
 
-# Install Kubernetes
-echo "[TASK 9] Install Kubernetes (kubeadm, kubelet and kubectl)"
-yum install -y -q kubeadm kubelet kubectl >/dev/null 2>&1
+cat <<EOF >  /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+EOF
+sysctl --system
 
-# Start and Enable kubelet service
-echo "[TASK 10] Enable and start kubelet service"
-systemctl enable kubelet >/dev/null 2>&1
-systemctl start kubelet >/dev/null 2>&1
+setenforce 0
 
-# Enable ssh password authentication
-echo "[TASK 11] Enable ssh password authentication"
-sed -i 's/^PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
-systemctl reload sshd
+yum install -y kubelet kubeadm kubectl --disableexcludes=kubernetes
 
-# Set Root password
-echo "[TASK 12] Set root password"
-echo "kubeadmin" | passwd --stdin root >/dev/null 2>&1
+systemctl enable kubelet && systemctl start kubelet
 
-# Update vagrant user's bashrc file
-echo "export TERM=xterm" >> /etc/bashrc
+sudo kubeadm init --pod-network-cidr=192.168.0.0/16 --ignore-preflight-errors=NumCPU
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+export KUBECONFIG=/etc/kubernetes/kubelet.conf
+
+kubectl create -f https://docs.projectcalico.org/v3.9/manifests/calico.yaml
